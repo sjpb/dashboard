@@ -6,8 +6,8 @@
         startstamp="$(date)"
         $CMD
         endstamp="$(date)"
-        echo "dashboard url for this job:" $(python dashboard.py "$startstamp" "$endstamp")
-       
+        echo "dashboard url for this job:" $(python dashboard.py "$startstamp" "$endstamp" "$SLURM_JOB_NODELIST")
+            
     Works on python 2.7 and 3.7.4 at least.
 """
 
@@ -29,7 +29,7 @@ def expand_hosts(hostlist):
     
         Requires `scontrol` to be available.
     """
-    hostnames = subprocess.check_output(('scontrol', 'show', 'hostnames', hostlist), universal_newlines=True).split('\n')
+    hostnames = subprocess.check_output(('scontrol', 'show', 'hostnames', hostlist), universal_newlines=True).strip('\n').split('\n')
     return hostnames
 
 def get_dashboard_url(start, end, hosts=None, pre=30, post=30):
