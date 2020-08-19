@@ -1,16 +1,18 @@
+#!/usr/bin/env python
 """ Print the grafana dashboard URL for a job on stdout.
 
-    Use in an sbatch script which contains something like:
+    Can be used from the command-line, e.g. in an sbatch script which contains something like:
     
     job.sh:
         startstamp="$(date)"
-        $CMD
+        <run my commands here>
         endstamp="$(date)"
-        echo "dashboard url for this job:" $(python dashboard.py "$startstamp" "$endstamp" "$SLURM_JOB_NODELIST")
+        BASEURL=<base dashboard url>
+        echo "dashboard url for this job:" $(python dashboard.py $BASEURL $startstamp $endstamp $SLURM_JOB_NODELIST)
             
     Works on python 2.7 and 3.7.4 at least.
 """
-
+from __future__ import print_function
 import time, os, sys, subprocess
 
 def datestr_to_ns(s):
@@ -32,24 +34,37 @@ def expand_hosts(hostlist):
     hostnames = subprocess.check_output(('scontrol', 'show', 'hostnames', hostlist), universal_newlines=True).strip('\n').split('\n')
     return hostnames
 
-def get_dashboard_url(start, end, hosts=None, pre=30, post=30):
+def get_dashboard_url(baseurl, start=None, end=None, hostlist=None, domain=None, pre=30, post=30):
     """ Get the grafana dashboard url for a given time range.
     
-        start, end: strs from `date` - tries to be broad in format it accepts
-        hosts: str giving slurm hostnames, e.g. "openhpc-compute-[12-13]"
-        pre, post: number of seconds to pad timespan by
+        Args:
+            baseurl: str, fixed part of dashboard URL (before `?`), e.g. 
+                v5: http://128.232.224.87:3000/d/hS1VtkHGk/openhpc-2
+                earlier: http://10.60.253.1:3000/dashboard/db/openhpc-compute
+            start, end: strs from `date` - tries to be broad in format it accepts, or None for default
+            hostlist: str, slurm "hostlist" expression, e.g. "openhpc-compute-[12-13]", or None for all
+            domain: str, domain name to add to hosts, or None if this is not required
+            pre, post: int, number of seconds to pad timespan by
         
         Returns a str.
     """
-    start_ns = datestr_to_ns(start) - pre *1000
-    end_ns = datestr_to_ns(end) + post * 1000
-    url = 'http://10.60.253.1:3000/dashboard/db/openhpc-compute?refresh=30s&orgId=4&from={start}&to={end}'.format(start=start_ns, end=end_ns)
-    if not hosts:
-        return url
-    hostnames = expand_hosts(hosts)
-    for host in hostnames:
-        url += '&var-hostname={host}.novalocal'.format(host=host)
-    return url
+    
+    url = []
+    if start:
+        start_ns = datestr_to_ns(start) - pre *1000
+        url.append('from=%s' % start_ns)
+    if end:
+        end_ns = datestr_to_ns(end) + post * 1000
+        url.append('to=%s' % end_ns)
+    if hostlist:
+        hostnames = expand_hosts(hostlist)
+        for host in hostnames:
+            hostparam = 'var-hostname=%s' % host
+            if domain:
+                hostparam += '.' + domain
+            url.append(hostparam)
+
+    return baseurl + '?' + '&'.join(url)
     
 if __name__ == '__main__':
     print(get_dashboard_url(*sys.argv[1:]))
